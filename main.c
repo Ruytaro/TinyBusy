@@ -25,9 +25,10 @@
 typedef struct data
 {
     uint8_t pair : 8;
-    uint8_t red : 3;
-    uint8_t green : 3;
-    uint8_t blue : 2;
+    uint8_t red : 5;
+    uint8_t green : 5;
+    uint8_t blue : 5;
+    uint8_t parity : 1;
 } data_t;
 
 volatile data_t current;    // last packet received
@@ -37,12 +38,17 @@ volatile uint16_t incoming; // rf scrach data
 volatile uint8_t read;      // track num read bits
 volatile uint8_t rf_ticks;  // rf ticks
 volatile uint8_t flags;     // global status flags
-
+volatile uint8_t button_flag;
 
 uint8_t EEMEM EEPROM_PEER = 0;
 
 ISR(WDT_vect){
+    button_flag = (button_flag << 1) | bit_is_set(PINB, PROG_PIN);
+    if (button_flag == 0)
+    {  
 
+    }
+      
 }
 
 ISR(PCINT0_vect)
@@ -71,7 +77,7 @@ ISR(TIM0_COMPB_vect)
         sbi(flags, PAIRED);
     }
 }
-//*/
+
 ISR(TIM0_COMPA_vect)
 {
     ticks++;
@@ -92,7 +98,7 @@ ISR(TIM0_COMPA_vect)
     {
         cbi(flags, ACTIVE);
     }
-    uint8_t value = ticks%8;
+    uint8_t value = ticks%32;
     if (current.red > value)
     {
         cbi(PORTB, RED_LED);
@@ -109,7 +115,7 @@ ISR(TIM0_COMPA_vect)
     {
         sbi(PORTB, GREEN_LED);
     }
-    if (current.blue > (value%4))
+    if (current.blue > value)
     {
         cbi(PORTB, BLUE_LED);
     }
@@ -126,7 +132,7 @@ int main(void)
     cbi(ADCSRA, ADEN);                                    // disable ADC
     sbi(ACSR, ACD);                                       // disable Analog comparator
     TCCR0B |= _BV(CS01);                                  // set prescaler to 8 (CLK=1.200.000/8=>150kHz)
-    OCR0A = MAX_COUNTER;                                  // set max counter value
+    OCR0A = MAX_COUNTER;                                  // set max counter value (150kHz/100=>1.5kHz)
     OCR0B = MAX_COUNTER / 2;                              // set threshold counter
     TIMSK0 |= _BV(OCIE0A) | _BV(OCIE0B);                  // enable Timer Compare interrupts A and B
     sbi(GIMSK, PCIE);                                     // enable PinChangeInterrupts
@@ -134,8 +140,7 @@ int main(void)
     wdt_enable(WDTO_120MS);                               // set prescaler to 0.120s and enable Watchdog Timer
     WDTCR |= _BV(WDTIE);                                  // enable Watchdog Timer interrupt
     sei();                                                // enable global interrupts
-    current.red = 0b111;
-    if (bit_is_set(PINB, RX_PIN))
+    if (bit_is_set(PINB, PROG_PIN))
     {
         sbi(flags, PAIRED);
         pair = eeprom_read_byte(EEPROM_PEER);

@@ -2,5 +2,5 @@
 # Ignored files and foldes
 *.o
 *.elf
-.eep
-.hex
+*.eep
+*.hex

@@ -7,10 +7,10 @@ PROJECT_NAME  = TinyBusy
 DEVICE        = attiny13
 CLOCK         = 1200000
 FUSES         = -U hfuse:w:0xD9:m -U lfuse:w:0xFF:m -U efuse:w:0xFF:m
-AVRDUDE_PROG  = -c usbtiny -P usb
+AVRDUDE_PROG  = -c avrisp -P /dev/ttyACM0
 ABOS_PORT     = avrisp
 ABOS_BAUDRATE = 19200
-AVRDUDE_OPS   = -B 0.5
+AVRDUDE_OPS   = -b $(ABOS_BAUDRATE)
 AVRDUDE       = avrdude -p $(DEVICE) $(AVRDUDE_PROG) $(AVRDUDE_OPS)
 
 OBJECT_FILES = main.o

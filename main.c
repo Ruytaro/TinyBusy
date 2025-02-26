@@ -16,9 +16,9 @@
 #define PAIRED 0
 #define COLLISION 1
 #define ACTIVE 2
-#define SOFT_PWM 3
+#define BUTTON 3
 
-#define MAX_COUNTER 100
+#define MAX_COUNTER 20
 
 #define ATT_PULSES 8
 
@@ -42,15 +42,6 @@ volatile uint8_t button_flag;
 
 uint8_t EEMEM EEPROM_PEER = 0;
 
-ISR(WDT_vect){
-    button_flag = (button_flag << 1) | bit_is_set(PINB, PROG_PIN);
-    if (button_flag == 0)
-    {  
-
-    }
-      
-}
-
 ISR(PCINT0_vect)
 {
         rf_ticks++;
@@ -58,7 +49,7 @@ ISR(PCINT0_vect)
 
 ISR(TIM0_COMPB_vect)
 {
-    if (bit_is_clear(flags, ACTIVE))
+/*    if (bit_is_clear(flags, ACTIVE))
         return;
     incoming = ((incoming << 1) | bit_is_set(PINB, RX_PIN));
     read++;
@@ -75,7 +66,7 @@ ISR(TIM0_COMPB_vect)
         eeprom_update_byte(EEPROM_PEER, incoming >> 8);
         pair = incoming >> 8;
         sbi(flags, PAIRED);
-    }
+    }*/
 }
 
 ISR(TIM0_COMPA_vect)
@@ -98,30 +89,32 @@ ISR(TIM0_COMPA_vect)
     {
         cbi(flags, ACTIVE);
     }
-    uint8_t value = ticks%32;
-    if (current.red > value)
-    {
-        cbi(PORTB, RED_LED);
-    }
-    else
+}
+
+void softpwm(uint8_t value){
+    if (current.red < value)
     {
         sbi(PORTB, RED_LED);
-    }    
-    if (current.green > value)
-    {
-        cbi(PORTB, GREEN_LED);
     }
     else
+    {
+        cbi(PORTB, RED_LED);
+    }    
+    if (current.green < value)
     {
         sbi(PORTB, GREEN_LED);
     }
-    if (current.blue > value)
+    else
     {
-        cbi(PORTB, BLUE_LED);
+        cbi(PORTB, GREEN_LED);
+    }
+    if (current.blue < value)
+    {
+        sbi(PORTB, BLUE_LED);
     }
     else
     {
-        sbi(PORTB, BLUE_LED);
+        cbi(PORTB, BLUE_LED);
     }
 }
 
@@ -137,8 +130,9 @@ int main(void)
     TIMSK0 |= _BV(OCIE0A) | _BV(OCIE0B);                  // enable Timer Compare interrupts A and B
     sbi(GIMSK, PCIE);                                     // enable PinChangeInterrupts
     PCMSK |= _BV(RX_PIN);                                 // set mask for PCI
-    wdt_enable(WDTO_120MS);                               // set prescaler to 0.120s and enable Watchdog Timer
-    WDTCR |= _BV(WDTIE);                                  // enable Watchdog Timer interrupt
+    //wdt_enable(WDTO_120MS);                               // set prescaler to 0.120s and enable Watchdog Timer
+    //WDTCR |= _BV(WDTIE);                                  // enable Watchdog Timer interrupt
+    current.red = 0x1f;                                    // clear current data
     sei();                                                // enable global interrupts
     if (bit_is_set(PINB, PROG_PIN))
     {
@@ -146,5 +140,6 @@ int main(void)
         pair = eeprom_read_byte(EEPROM_PEER);
     }
     while (1){
+        softpwm(ticks&0x1F);
     }
 }

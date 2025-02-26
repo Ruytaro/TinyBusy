@@ -6,7 +6,7 @@
 PROJECT_NAME  = TinyBusy
 DEVICE        = attiny13
 CLOCK         = 1200000
-FUSES         = -U hfuse:w:0xD9:m -U lfuse:w:0xFF:m -U efuse:w:0xFF:m
+FUSES         = -U lfuse:w:0x7A:m -U hfuse:w:0xFF:m -U efuse:w:0xFF:m
 AVRDUDE_PROG  = -c avrisp -P /dev/ttyACM0
 ABOS_PORT     = avrisp
 ABOS_BAUDRATE = 19200

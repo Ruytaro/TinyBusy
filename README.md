@@ -9,7 +9,7 @@ You *still* need a usb cable in order to recharge the battery, ~~but hey is bett
 
 ## The ingredients:
 
-- an Attiny13A (1kB flash, 64B RAM, 64B EEPROM) @ 1.2MHz
+- an Attiny13A (1kB flash, 64B RAM, 64B EEPROM) @ 9.6MHz
 - 2 "bare" SMD 5050 RGB leds (no fancy neopixels here)
 - TP4056 Li-ion battery charger.
 - Some smd resistors and capacitors

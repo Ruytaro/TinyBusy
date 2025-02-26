@@ -3,7 +3,6 @@
         {
             "name": "AVR",
             "includePath": [
-                "/home/resu/attiny13/tinyRGB/**",
                 "/usr/lib/avr/include/avr/*"
             ],
             "defines": [],
@@ -14,7 +13,6 @@
             "mergeConfigurations": false,
             "browse": {
                 "path": [
-                    "/home/resu/attiny13/tinyRGB/**",
                     "/usr/lib/avr/include/**",
                     "${workspaceFolder}"
                 ],

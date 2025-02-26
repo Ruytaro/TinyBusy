@@ -17,6 +17,8 @@
 #define COLLISION 1
 #define ACTIVE 2
 #define BUTTON 3
+#define RX_READY 4
+#define RX_READ 5
 
 #define MAX_COUNTER 20
 
@@ -25,48 +27,35 @@
 typedef struct data
 {
     uint8_t pair : 8;
+    uint8_t ipair : 8;
     uint8_t red : 5;
     uint8_t green : 5;
     uint8_t blue : 5;
     uint8_t parity : 1;
 } data_t;
 
-volatile data_t current;    // last packet received
-volatile uint8_t ticks;     // system ticks for soft-pwm
-volatile uint8_t pair;      // transmitter pairing code
-volatile uint16_t incoming; // rf scrach data
-volatile uint8_t read;      // track num read bits
-volatile uint8_t rf_ticks;  // rf ticks
-volatile uint8_t flags;     // global status flags
-volatile uint8_t button_flag;
+volatile uint8_t ticks;    // system ticks for soft-pwm
+volatile uint8_t pair;     // transmitter pairing code
+volatile uint8_t rf_ticks; // rf ticks
+volatile uint8_t flags;    // global status flags
+uint32_t incoming; // rf scrach data
+uint8_t read;      // track num read bits
+data_t current;    // last packet received
 
 uint8_t EEMEM EEPROM_PEER = 0;
 
 ISR(PCINT0_vect)
 {
-        rf_ticks++;
+    rf_ticks++;
 }
 
 ISR(TIM0_COMPB_vect)
 {
-/*    if (bit_is_clear(flags, ACTIVE))
-        return;
-    incoming = ((incoming << 1) | bit_is_set(PINB, RX_PIN));
-    read++;
-    if (read == 8 && bit_is_set(flags, PAIRED) && incoming != pair)
-        cbi(flags, ACTIVE);
-    if (read == 16)
+    if (bit_is_set(flags, ACTIVE))
     {
-        current = *(data_t *)incoming;
-        cbi(flags, ACTIVE);
-        read = 0;
+        sbi(flags, RX_READY);
+        bit_is_set(PINB, RX_PIN) ? sbi(flags, RX_READ) : cbi(flags, RX_READ);
     }
-    if (bit_is_clear(flags, PAIRED) && (incoming & 0xFF) == (incoming >> 8))
-    {
-        eeprom_update_byte(EEPROM_PEER, incoming >> 8);
-        pair = incoming >> 8;
-        sbi(flags, PAIRED);
-    }*/
 }
 
 ISR(TIM0_COMPA_vect)
@@ -91,7 +80,31 @@ ISR(TIM0_COMPA_vect)
     }
 }
 
-void softpwm(uint8_t value){
+void rxRead()
+{
+    cbi(flags, RX_READY);
+    if (bit_is_set(flags, RX_READ))
+    {
+        incoming |= 1 << read;
+    }
+    read++;
+    if (read == 32)
+    {
+        data_t *data = (data_t *)&incoming;
+        if (!data->pair ^ data->ipair)
+        {
+            if (data->pair == pair)
+            {
+                current = *data;
+            }
+        }
+        read = 0;
+        incoming = 0;
+    }
+}
+
+void softpwm(uint8_t value)
+{
     if (current.red < value)
     {
         sbi(PORTB, RED_LED);
@@ -99,7 +112,7 @@ void softpwm(uint8_t value){
     else
     {
         cbi(PORTB, RED_LED);
-    }    
+    }
     if (current.green < value)
     {
         sbi(PORTB, GREEN_LED);
@@ -129,17 +142,18 @@ int main(void)
     OCR0B = MAX_COUNTER / 2;                              // set threshold counter
     TIMSK0 |= _BV(OCIE0A) | _BV(OCIE0B);                  // enable Timer Compare interrupts A and B
     sbi(GIMSK, PCIE);                                     // enable PinChangeInterrupts
-    PCMSK |= _BV(RX_PIN);                                 // set mask for PCI
-    //wdt_enable(WDTO_120MS);                               // set prescaler to 0.120s and enable Watchdog Timer
-    //WDTCR |= _BV(WDTIE);                                  // enable Watchdog Timer interrupt
-    current.red = 0x1f;                                    // clear current data
+    PCMSK |= _BV(RX_PIN) | _BV(PROG_PIN);                 // set mask for PCI
+    current.red = 0x1f;                                   // set demo data for testing
     sei();                                                // enable global interrupts
     if (bit_is_set(PINB, PROG_PIN))
     {
         sbi(flags, PAIRED);
         pair = eeprom_read_byte(EEPROM_PEER);
     }
-    while (1){
-        softpwm(ticks&0x1F);
+    while (1)
+    {
+        softpwm(ticks & 0x1F);
+        if (bit_is_set(flags, RX_READY))
+            rxRead();
     }
 }

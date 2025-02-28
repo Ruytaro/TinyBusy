@@ -19,6 +19,8 @@
 #define BUTTON 3
 #define RX_READY 4
 #define RX_READ 5
+#define ATT_CALL 6
+#define RF_SYNC 7
 
 #define MAX_COUNTER 20
 
@@ -38,6 +40,7 @@ volatile uint8_t ticks;    // system ticks for soft-pwm
 volatile uint8_t pair;     // transmitter pairing code
 volatile uint8_t rf_ticks; // rf ticks
 volatile uint8_t flags;    // global status flags
+volatile uint8_t pinb;     // last PINB state
 uint32_t incoming; // rf scrach data
 uint8_t read;      // track num read bits
 data_t current;    // last packet received
@@ -47,51 +50,43 @@ uint8_t EEMEM EEPROM_PEER = 0;
 ISR(PCINT0_vect)
 {
     rf_ticks++;
-}
-
-ISR(TIM0_COMPB_vect)
-{
-    if (bit_is_set(flags, ACTIVE))
-    {
-        sbi(flags, RX_READY);
-        bit_is_set(PINB, RX_PIN) ? sbi(flags, RX_READ) : cbi(flags, RX_READ);
-    }
+    if (rf_ticks > ATT_PULSES)
+        sbi(flags,ATT_CALL);
+    
+    if (bit_is_clear(PINB,RX_PIN)&&bit_is_set(flags,RF_SYNC))
+    TCNT0 = MAX_COUNTER-1;
 }
 
 ISR(TIM0_COMPA_vect)
 {
     ticks++;
-    cbi(flags, COLLISION);
-    if (rf_ticks > ATT_PULSES)
-    {
-        if (bit_is_set(flags, ACTIVE))
-        {
-            sbi(flags, COLLISION);
-        }
-        else
-        {
-            sbi(flags, ACTIVE);
-        }
-    }
     rf_ticks = 0;
-    if (sbi(flags, COLLISION))
+    if (flags & (_BV(ATT_CALL)|_BV(ACTIVE))){
+        sbi(flags,COLLISION);
+    }
+    cbi(flags, ATT_CALL);
+}
+
+ISR(TIM0_COMPB_vect)
+{
+    sbi(flags,RF_SYNC);
+    if (bit_is_set(flags, ACTIVE))
     {
-        cbi(flags, ACTIVE);
+        sbi(flags, RX_READY);
+        pinb = PINB;
     }
 }
 
 void rxRead()
 {
     cbi(flags, RX_READY);
-    if (bit_is_set(flags, RX_READ))
-    {
+    if (pinb&(_BV(RX_PIN)))
         incoming |= 1 << read;
-    }
     read++;
     if (read == 32)
     {
         data_t *data = (data_t *)&incoming;
-        if (!data->pair ^ data->ipair)
+        if (data->pair == ~data->ipair)
         {
             if (data->pair == pair)
             {
@@ -137,8 +132,8 @@ int main(void)
     PORTB = _BV(PROG_PIN);                                // set PROG_PIN pull-up
     cbi(ADCSRA, ADEN);                                    // disable ADC
     sbi(ACSR, ACD);                                       // disable Analog comparator
-    TCCR0B |= _BV(CS01);                                  // set prescaler to 8 (CLK=1.200.000/8=>150kHz)
-    OCR0A = MAX_COUNTER;                                  // set max counter value (150kHz/100=>1.5kHz)
+    TCCR0B |= _BV(CS01);                                  // set prescaler to 8 (CLK=9.600.000/8=>1.2MHz)
+    OCR0A = MAX_COUNTER;                                  // set max counter value (1.2MHz/20=>60kHz)
     OCR0B = MAX_COUNTER / 2;                              // set threshold counter
     TIMSK0 |= _BV(OCIE0A) | _BV(OCIE0B);                  // enable Timer Compare interrupts A and B
     sbi(GIMSK, PCIE);                                     // enable PinChangeInterrupts
@@ -153,6 +148,12 @@ int main(void)
     while (1)
     {
         softpwm(ticks & 0x1F);
+        if (bit_is_set(flags,COLLISION)){
+            read=0;
+            incoming=0;
+            cbi(flags,COLLISION);
+            cbi(flags,ACTIVE);
+        }
         if (bit_is_set(flags, RX_READY))
             rxRead();
     }

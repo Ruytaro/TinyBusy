@@ -47,16 +47,6 @@ data_t current;    // last packet received
 
 uint8_t EEMEM EEPROM_PEER = 0;
 
-ISR(PCINT0_vect)
-{
-    rf_ticks++;
-    if (rf_ticks > ATT_PULSES)
-        sbi(flags,ATT_CALL);
-    
-    if (bit_is_clear(PINB,RX_PIN)&&bit_is_set(flags,RF_SYNC))
-    TCNT0 = MAX_COUNTER-1;
-}
-
 ISR(TIM0_COMPA_vect)
 {
     ticks++;
@@ -74,55 +64,6 @@ ISR(TIM0_COMPB_vect)
     {
         sbi(flags, RX_READY);
         pinb = PINB;
-    }
-}
-
-void rxRead()
-{
-    cbi(flags, RX_READY);
-    if (pinb&(_BV(RX_PIN)))
-        incoming |= 1 << read;
-    read++;
-    if (read == 32)
-    {
-        data_t *data = (data_t *)&incoming;
-        if (data->pair == ~data->ipair)
-        {
-            if (data->pair == pair)
-            {
-                current = *data;
-            }
-        }
-        read = 0;
-        incoming = 0;
-    }
-}
-
-void softpwm(uint8_t value)
-{
-    if (current.red < value)
-    {
-        sbi(PORTB, RED_LED);
-    }
-    else
-    {
-        cbi(PORTB, RED_LED);
-    }
-    if (current.green < value)
-    {
-        sbi(PORTB, GREEN_LED);
-    }
-    else
-    {
-        cbi(PORTB, GREEN_LED);
-    }
-    if (current.blue < value)
-    {
-        sbi(PORTB, BLUE_LED);
-    }
-    else
-    {
-        cbi(PORTB, BLUE_LED);
     }
 }
 
@@ -147,14 +88,6 @@ int main(void)
     }
     while (1)
     {
-        softpwm(ticks & 0x1F);
-        if (bit_is_set(flags,COLLISION)){
-            read=0;
-            incoming=0;
-            cbi(flags,COLLISION);
-            cbi(flags,ACTIVE);
-        }
-        if (bit_is_set(flags, RX_READY))
-            rxRead();
+      
     }
 }

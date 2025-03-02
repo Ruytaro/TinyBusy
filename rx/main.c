@@ -56,8 +56,10 @@ ISR(PCINT0_vect)
     rf_ticks++;
     if (rf_ticks > ATT_PULSES)
         sbi(flags,ATT_CALL);
-    if (bit_is_clear(PINB,RX_PIN)&&bit_is_set(flags,RF_SYNC))
-    TCNT0 = 0;
+    if (bit_is_set(PINB,RX_PIN)&&bit_is_set(flags,RF_SYNC)){
+        TCNT0 = 0;
+        cbi(flags,RF_SYNC);
+    }
 }
 
 ISR(TIM0_COMPA_vect)
@@ -103,7 +105,7 @@ void rxRead()
 }
 
 void softpwm(uint8_t value){
-    uint8_t mask = 0x0;
+    uint8_t mask = _BV(PROG_PIN);
     if (current.red <= value)
     {
         mask |= _BV(RED_LED);
@@ -116,13 +118,13 @@ void softpwm(uint8_t value){
     {
         mask |= _BV(BLUE_LED);
     }
-    PORTB |= mask;
+    PORTB = mask;
 }
 
 int main(void)
 {
     DDRB = _BV(RED_LED) | _BV(GREEN_LED) | _BV(BLUE_LED); // set LED pins as OUTPUT
-    PORTB = _BV(PROG_PIN);                                // set PROG_PIN pull-up
+   // PORTB = _BV(PROG_PIN);                                // set PROG_PIN pull-up
     cbi(ADCSRA, ADEN);                                    // disable ADC
     sbi(ACSR, ACD);                                       // disable Analog comparator
     TCCR0B |= _BV(CS01);                                  // set prescaler to 8 (CLK=9.600.000/8=>1.2MHz)
@@ -131,23 +133,22 @@ int main(void)
     TIMSK0 |= _BV(OCIE0A) | _BV(OCIE0B);                  // enable Timer Compare interrupts A and B
     sbi(GIMSK, PCIE);                                     // enable PinChangeInterrupts
     PCMSK |= _BV(RX_PIN) | _BV(PROG_PIN);                 // set mask for PCI
-    current.red = 0x1f;                                   // set demo data for testing
+    current.red = 0xF;                                   // set demo data for testing
     sei();                                                // enable global interrupts
     if (bit_is_set(PINB, PROG_PIN))
-    {
         sbi(flags, PAIRED);
-        pair = eeprom_read_byte(&EEPROM_PEER);
-    }
+    pair = eeprom_read_byte(&EEPROM_PEER);
+    
     while (1)
     {
         softpwm(ticks & 0x1F);
+        if (bit_is_set(flags, RX_READY))
+            rxRead();
         if (bit_is_set(flags,COLLISION)){
             counter.read=0;
             incoming=0;
             cbi(flags,COLLISION);
             cbi(flags,ACTIVE);
         }
-        if (bit_is_set(flags, RX_READY))
-            rxRead();
     }
 }

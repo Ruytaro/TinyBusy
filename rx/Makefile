@@ -77,7 +77,7 @@ size: $(PROJECT_NAME).elf
 read: read_flash read_eeprom
 
 clean:
-	rm -f $(PROJECT_NAME).hex $(PROJECT_NAME).elf $(OBJECT_FILES)
+	rm -f $(PROJECT_NAME).hex $(PROJECT_NAME).elf $(PROJECT_NAME).eep $(OBJECT_FILES)
 
 $(PROJECT_NAME).elf: $(OBJECT_FILES)
 	$(COMPILE) -o $(PROJECT_NAME).elf $(OBJECT_FILES)
@@ -86,7 +86,7 @@ $(PROJECT_NAME).hex: $(PROJECT_NAME).elf
 	rm -f $(PROJECT_NAME).hex
 	avr-objcopy -j .text -j .data -O ihex $(PROJECT_NAME).elf $(PROJECT_NAME).hex
 	avr-objcopy -j .eeprom --set-section-flags=.eeprom="alloc,load" --change-section-lma .eeprom=0 -O ihex $(PROJECT_NAME).elf $(PROJECT_NAME).eep
-	size
+
 disasm:	$(PROJECT_NAME).elf
 	avr-objdump -d $(PROJECT_NAME).elf
 

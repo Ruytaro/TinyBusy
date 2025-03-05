@@ -3,7 +3,7 @@
 #											#
 #############################################
 
-PROJECT_NAME  = TinyBusy
+PROJECT_NAME  = TinyBusy_TX
 DEVICE        = attiny13
 CLOCK         = 1200000
 FUSES         = -U lfuse:w:0x7A:m -U hfuse:w:0xFF:m -U efuse:w:0xFF:m

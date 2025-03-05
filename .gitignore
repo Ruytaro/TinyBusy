@@ -1,6 +1,6 @@
 
 # Ignored files and foldes
 ?x/*.o
-?x/*.elf
-?x/*.eep
-?x/*.hex
+?x/*X.elf
+?x/*X.eep
+?x/*X.hex

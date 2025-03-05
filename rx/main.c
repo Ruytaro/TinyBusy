@@ -13,13 +13,6 @@
 #define GREEN_LED PB1
 #define RED_LED PB0
 
-#define PAIRED 0
-#define COLLISION 1
-#define ACTIVE 2
-#define RX_READY 3
-#define ATT_CALL 4
-#define RF_SYNC 5
-
 #define MAX_COUNTER 20
 
 #define ATT_PULSES 8
@@ -43,8 +36,15 @@ typedef struct counter
 volatile uint8_t ticks;    // system ticks for soft-pwm
 volatile uint8_t pair;     // transmitter pairing code
 volatile uint8_t rf_ticks; // rf ticks
-volatile uint8_t flags;    // global status flags
 volatile uint8_t pinb;     // last PINB state
+
+volatile uint8_t rf_sync;
+volatile uint8_t att_call;
+volatile uint8_t active;
+volatile uint8_t rx_ready;
+volatile uint8_t collision;
+volatile uint8_t paired;
+
 uint32_t incoming; // rf scrach data
 counter_t counter; // track num read bits
 data_t current;    // last packet received
@@ -55,10 +55,10 @@ ISR(PCINT0_vect)
 {
     rf_ticks++;
     if (rf_ticks > ATT_PULSES)
-        sbi(flags,ATT_CALL);
-    if (bit_is_set(PINB,RX_PIN)&&bit_is_set(flags,RF_SYNC)){
+        att_call = 1;
+    if (bit_is_set(PINB,RX_PIN)&&rf_sync){
         TCNT0 = 0;
-        cbi(flags,RF_SYNC);
+        rf_sync = 0;
     }
 }
 
@@ -66,24 +66,22 @@ ISR(TIM0_COMPA_vect)
 {
     ticks++;
     rf_ticks = 0;
-    if (flags & (_BV(ATT_CALL)|_BV(ACTIVE))){
-        sbi(flags,COLLISION);
-    }
-    cbi(flags, ATT_CALL);
+    if (att_call && paired)
+        collision=1;
+    att_call=0;
 }
 
 ISR(TIM0_COMPB_vect)
 {
-    sbi(flags,RF_SYNC);
+    rf_sync=1;
     pinb = PINB;
-    if (bit_is_set(flags, ACTIVE))
-        sbi(flags, RX_READY);
-    
+    if (active)
+        rx_ready = 1;    
 }
 
 void rxRead()
 {
-    cbi(flags, RX_READY);
+    rx_ready = 0;
     if (bit_is_set(pinb,RX_PIN)){
         incoming |= 1 << counter.read;
         counter.parity++;
@@ -124,7 +122,7 @@ void softpwm(uint8_t value){
 int main(void)
 {
     DDRB = _BV(RED_LED) | _BV(GREEN_LED) | _BV(BLUE_LED); // set LED pins as OUTPUT
-   // PORTB = _BV(PROG_PIN);                                // set PROG_PIN pull-up
+    PORTB = _BV(PROG_PIN);                                // set PROG_PIN pull-up
     cbi(ADCSRA, ADEN);                                    // disable ADC
     sbi(ACSR, ACD);                                       // disable Analog comparator
     TCCR0B |= _BV(CS01);                                  // set prescaler to 8 (CLK=9.600.000/8=>1.2MHz)
@@ -136,19 +134,19 @@ int main(void)
     current.red = 0xF;                                   // set demo data for testing
     sei();                                                // enable global interrupts
     if (bit_is_set(PINB, PROG_PIN))
-        sbi(flags, PAIRED);
+        paired = 1;
     pair = eeprom_read_byte(&EEPROM_PEER);
     
     while (1)
     {
         softpwm(ticks & 0x1F);
-        if (bit_is_set(flags, RX_READY))
+        if (rx_ready)
             rxRead();
-        if (bit_is_set(flags,COLLISION)){
+        if (collision){
             counter.read=0;
             incoming=0;
-            cbi(flags,COLLISION);
-            cbi(flags,ACTIVE);
+            collision=0;
+            active=0;
         }
     }
 }

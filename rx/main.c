@@ -8,145 +8,111 @@
 #define sbi(sfr, bit) (_SFR_BYTE(sfr) |= _BV(bit))
 
 #define PROG_PIN PB4
-#define RX_PIN PB3
-#define BLUE_LED PB2
-#define GREEN_LED PB1
-#define RED_LED PB0
+#define TX_PIN PB2
+#define RX_PIN PB1
+#define LED_PIN PB0
 
-#define MAX_COUNTER 20
+#define HIGH_TIME 12
+#define LOW_TIME 5
 
-#define ATT_PULSES 8
+#define MAX_COUNTER 24
 
-typedef struct data
+#define ATT_PULSES 4
+typedef union data
 {
-    uint8_t pair : 8;
+ struct
+{
     uint8_t red : 5;
-    uint8_t green : 5;
+    uint8_t green : 6;
     uint8_t blue : 5;
+    uint8_t code : 7;
     uint8_t parity : 1;
-    uint8_t ipair : 8;
+} ;
+uint32_t raw; // raw data for easy access
 } data_t;
 
-typedef struct counter
+typedef union rgb
 {
-    uint8_t read : 7;
-    uint8_t parity : 1;
-} counter_t;
+    uint32_t raw;
+    struct main
+{
+    uint8_t red;    // 5 bits
+    uint8_t green;  // 6 bits
+    uint8_t blue;   // 5 bits
+}dis;
+} rgb_t;
 
-volatile uint8_t ticks;    // system ticks for soft-pwm
-volatile uint8_t pair;     // transmitter pairing code
-volatile uint8_t rf_ticks; // rf ticks
-volatile uint8_t pinb;     // last PINB state
+volatile data_t rx_data; // data received from RF
+volatile uint8_t bit;
+volatile uint8_t bit_count; // number of bits received
 
-volatile uint8_t rf_sync;
-volatile uint8_t att_call;
-volatile uint8_t active;
-volatile uint8_t rx_ready;
-volatile uint8_t collision;
-volatile uint8_t paired;
+void updateLED();
+void enableRX();
 
-uint32_t incoming; // rf scrach data
-counter_t counter; // track num read bits
-data_t current;    // last packet received
-
-uint8_t EEMEM EEPROM_PEER = 0xAA;
+rgb_t current;    // last packet received
 
 ISR(PCINT0_vect)
 {
-    rf_ticks++;
-    if (rf_ticks > ATT_PULSES)
-        att_call = 1;
-    if (bit_is_set(PINB,RX_PIN)&&rf_sync){
-        TCNT0 = 0;
-        rf_sync = 0;
-    }
+    //PCInt
+}
+
+ISR(WDT_vect)
+{
+    updateLED();
+}
+
+ISR(INT0_vect)
+{
+    //Int0 (RF_RX pin)
 }
 
 ISR(TIM0_COMPA_vect)
 {
-    ticks++;
-    rf_ticks = 0;
-    if (att_call && paired)
-        collision=1;
-    att_call=0;
+    PORTB |= _BV(LED_PIN);
+    current.raw >> (23 - bit) & 1 ? OCR0B = HIGH_TIME : OCR0B = LOW_TIME;
+    bit++;
 }
 
 ISR(TIM0_COMPB_vect)
 {
-    rf_sync=1;
-    pinb = PINB;
-    if (active)
-        rx_ready = 1;    
+    PORTB &= ~_BV(LED_PIN);
+    if (bit > 23){
+        enableRX();
+    }
 }
 
-void rxRead()
+void enableRX()
 {
-    rx_ready = 0;
-    if (bit_is_set(pinb,RX_PIN)){
-        incoming |= 1 << counter.read;
-        counter.parity++;
-    }
-    counter.read++;
-    if (counter.read == 32)
-    {
-        data_t *data = (data_t *)&incoming;
-        if (data->pair == (uint8_t)~data->ipair && data->parity==counter.parity)
-        {
-            if (data->pair == pair)
-            {
-                current = *data;
-            }
-        }
-        counter.read = 0;
-        incoming = 0;
-    }
+    GIMSK |= _BV(INT0);                     // enable INT0
+    TIMSK0 &= ~(_BV(OCIE0A) | _BV(OCIE0B)); // disable Timer Compare interrupts A and B
+    bit = 0;                                 // reset bit counter
 }
 
-void softpwm(uint8_t value){
-    uint8_t mask = _BV(PROG_PIN);
-    if (current.red <= value)
-    {
-        mask |= _BV(RED_LED);
-    }
-    if (current.green <= value)
-    {
-        mask |= _BV(GREEN_LED);
-    }
-    if (current.blue <= value)
-    {
-        mask |= _BV(BLUE_LED);
-    }
-    PORTB = mask;
+void updateLED(){
+    bit=0;
+    GIMSK &= ~_BV(INT0);                    // disable INT0
+    OCR0A = MAX_COUNTER;                    // set max counter value (9.6MHz/24=>400kHz)
+    OCR0B = MAX_COUNTER;                    // set threshold counter
+    TIMSK0 |= _BV(OCIE0A) | _BV(OCIE0B);    // enable Timer Compare interrupts A and B
 }
+
+
 
 int main(void)
 {
-    DDRB = _BV(RED_LED) | _BV(GREEN_LED) | _BV(BLUE_LED); // set LED pins as OUTPUT
-    PORTB = _BV(PROG_PIN);                                // set PROG_PIN pull-up
+    DDRB = _BV(LED_PIN) | _BV(TX_PIN); // set LED pins as OUTPUT
+    PORTB = _BV(PROG_PIN)|_BV(RX_PIN);  // set PROG_PIN pull-up
     cbi(ADCSRA, ADEN);                                    // disable ADC
     sbi(ACSR, ACD);                                       // disable Analog comparator
-    TCCR0B |= _BV(CS01);                                  // set prescaler to 8 (CLK=9.600.000/8=>1.2MHz)
-    OCR0A = MAX_COUNTER;                                  // set max counter value (1.2MHz/20=>60kHz)
-    OCR0B = MAX_COUNTER / 2;                              // set threshold counter
-    TIMSK0 |= _BV(OCIE0A) | _BV(OCIE0B);                  // enable Timer Compare interrupts A and B
-    sbi(GIMSK, PCIE);                                     // enable PinChangeInterrupts
-    PCMSK |= _BV(RX_PIN) | _BV(PROG_PIN);                 // set mask for PCI
-    current.red = 0xF;                                   // set demo data for testing
+    TCCR0A |= _BV(WGM01);
+    TCCR0B |= _BV(CS00);                                  // set prescaler to 1 (CLK=9.600.000/1=>9.6MHz)
+    WDTCR = _BV(WDTIE)| _BV(WDP1);                          // enable WDT interrupt with 64ms timeout          
+
+    current.dis.red = 0x1F;                                    // set demo data for testing
     sei();                                                // enable global interrupts
-    if (bit_is_set(PINB, PROG_PIN))
-        paired = 1;
-    pair = eeprom_read_byte(&EEPROM_PEER);
     
     while (1)
     {
-        softpwm(ticks & 0x1F);
-        if (rx_ready)
-            rxRead();
-        if (collision){
-            counter.read=0;
-            incoming=0;
-            collision=0;
-            active=0;
-        }
+        
     }
 }

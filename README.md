@@ -3,7 +3,7 @@
 
 ## RGB status indicator
 
-Tell everyone your availability to meet, or signal the meeting room status. All without the need of any cable. You can even pair your remote (~~sold separately~~) and switch the light without leaving from your desk.
+Tell everyone your availability to meet, or signal the meeting room status. All without the need of any cable. You can even pair your remote (~~sold separately~~, *use the DiY version*) and switch the light without leaving from your desk.
 
 You *still* need a usb cable in order to recharge the battery, ~~but hey is better than nothing~~.
 
